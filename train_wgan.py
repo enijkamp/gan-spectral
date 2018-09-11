@@ -129,7 +129,7 @@ def get_output_dir(exp_id):
     return output_dir
 
 
-def create_logger(output_dir, console=True):
+def create_logger(output_dir):
     log_format = logging.Formatter("%(asctime)s : %(message)s")
     logger = logging.getLogger('')
     logger.handlers = []
@@ -137,10 +137,9 @@ def create_logger(output_dir, console=True):
     file_handler = logging.FileHandler(output_file)
     file_handler.setFormatter(log_format)
     logger.addHandler(file_handler)
-    if console:
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(log_format)
-        logger.addHandler(console_handler)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(log_format)
+    logger.addHandler(console_handler)
     logger.setLevel(logging.INFO)
     return logger
 
