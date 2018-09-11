@@ -171,7 +171,7 @@ logger.info(net_g)
 
 train_flag = lambda: [net.train() for net in [net_d, net_g]]
 eval_flag = lambda: [net.eval() for net in [net_d, net_g]]
-grad_norm = lambda net: torch.sqrt(sum(torch.sum(p.grad**2) for p in net.parameters() if p.grad is not None))
+grad_norm = lambda net: torch.sqrt(sum(torch.sum(p.grad**2) for p in net.parameters()))
 
 def weights_init(m):
     classname = m.__class__.__name__
