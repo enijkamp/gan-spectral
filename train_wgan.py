@@ -17,46 +17,9 @@ import torchvision.utils as vutils
 import inception_score_v3 as is_v3
 
 
-class Generator(torch.nn.Module):
+class NetG(torch.nn.Module):
     def __init__(self, nz=128, nc=3, ngf=512):
-        super(Generator, self).__init__()
-
-        self.nz = nz
-        self.ngf = ngf
-
-        self.l0_0 = torch.nn.Linear(nz, 4 * 4 * ngf)
-        self.l0_1 = torch.nn.BatchNorm2d(4 * 4 * ngf)
-        self.l0_2 = torch.nn.ReLU(inplace=True)
-
-        self.dc1_0 = torch.nn.ConvTranspose2d(ngf, ngf // 2, 4, 2, 1)
-        self.dc1_1 = torch.nn.BatchNorm2d(ngf // 2)
-        self.dc1_2 = torch.nn.ReLU(inplace=True)
-
-        self.dc2_0 = torch.nn.ConvTranspose2d(ngf // 2, ngf // 4, 4, 2, 1)
-        self.dc2_1 = torch.nn.BatchNorm2d(ngf // 4)
-        self.dc2_2 = torch.nn.ReLU(inplace=True)
-
-        self.dc3_0 = torch.nn.ConvTranspose2d(ngf // 4, ngf // 8, 4, 2, 1)
-        self.dc3_1 = torch.nn.BatchNorm2d(ngf // 8)
-        self.dc3_2 = torch.nn.ReLU(inplace=True)
-
-        self.dc4_0 = torch.nn.ConvTranspose2d(ngf // 8, nc, 3, 1, 1)
-        self.dc4_1 = torch.nn.Tanh()
-
-    def forward(self, z):
-        l0 = self.l0_2(self.l0_1(self.l0_0(z)))
-        l0 = l0.view(self.nz, self.ngf, 4, 4)
-        dc1 = self.dc1_2(self.dc1_1(self.dc1_0(l0)))
-        dc2 = self.dc2_2(self.dc2_1(self.dc2_0(dc1)))
-        dc3 = self.dc3_2(self.dc3_1(self.dc3_0(dc2)))
-        dc4 = self.dc4_2(self.dc4_1(self.dc4_0(dc3)))
-
-        return dc4
-
-
-class Generator(torch.nn.Module):
-    def __init__(self, nz=128, nc=3, ngf=512):
-        super().__init__()
+        super(NetG, self).__init__()
 
         self.nz = nz
         self.ngf = ngf
@@ -88,9 +51,9 @@ class Generator(torch.nn.Module):
         return out
 
 
-class Discriminator(torch.nn.Module):
+class NetD(torch.nn.Module):
     def __init__(self, ndf=512, nc=3):
-        super().__init__()
+        super(NetD, self).__init__()
 
         self.layer1 = self.layer(3, ndf // 8)
         self.layer2 = self.layer(ndf // 8, ndf // 4)
@@ -162,8 +125,8 @@ loader = torch.utils.data.DataLoader(
                          transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])),
     batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 
-net_d = Discriminator().cuda()
-net_g = Generator(nz=args.nz).cuda()
+net_d = NetD().cuda()
+net_g = NetG(nz=args.nz).cuda()
 
 logger.info(args)
 logger.info(net_d)
@@ -197,7 +160,6 @@ for epoch in range(200):
     train_flag()
     for i, (x, _) in enumerate(loader):
         net_d.zero_grad()
-
         z = torch.randn(args.batch_size, args.nz).cuda()
         x_hat = net_g(z).detach()
         x = x.cuda()
