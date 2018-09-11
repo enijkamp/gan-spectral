@@ -113,7 +113,7 @@ def set_gpu(device):
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
 
-set_gpu(1)
+set_gpu(0)
 
 output_dir = get_output_dir(get_exp_id())
 logger = create_logger(output_dir)
