@@ -172,19 +172,19 @@ for epoch in range(500):
 
     train_flag()
     for i, (x, _) in enumerate(loader):
-        net_d.zero_grad()
+        zero_grad()
         z = torch.randn(args.batch_size, args.nz).cuda()
-        x_hat = net_g(z).detach()
+        x_hat = net_g(z)
         x = x.cuda()
 
         e_real = torch.mean(F.softplus(-net_d(x)))
-        e_fake = torch.mean(F.softplus(net_d(x_hat)))
+        e_fake = torch.mean(F.softplus(net_d(x_hat.detach())))
         loss_d = e_real + e_fake
         loss_d.backward()
         optim_d.step()
 
-        net_g.zero_grad()
-        loss_g = -net_d(net_g(z)).mean()
+        zero_grad()
+        loss_g = torch.mean(F.softplus(-net_d(x_hat)))
         loss_g.backward()
         optim_g.step()
 

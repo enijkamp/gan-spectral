@@ -195,12 +195,10 @@ logger = create_logger(output_dir)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
-
 parser.add_argument('--lr', type=float, default=0.0002)
 parser.add_argument('--beta1', type=float, default=0.0)
 parser.add_argument('--beta2', type=float, default=0.9)
 parser.add_argument('--gamma', type=float, default=0.99)
-
 parser.add_argument('--nz', type=int, default=128)
 
 args = parser.parse_args()
@@ -241,17 +239,17 @@ for epoch in range(500):
     for i, (x, _) in enumerate(loader):
         zero_grad()
         z = torch.randn(args.batch_size, args.nz).cuda()
-        x_hat = net_g(z).detach()
+        x_hat = net_g(z)
         x = x.cuda()
 
         e_real = torch.mean(F.softplus(-net_d(x)))
-        e_fake = torch.mean(F.softplus(net_d(x_hat)))
+        e_fake = torch.mean(F.softplus(net_d(x_hat.detach())))
         loss_d = e_real + e_fake
         loss_d.backward()
         optim_d.step()
 
         zero_grad()
-        loss_g = -net_d(net_g(z)).mean()
+        loss_g = torch.mean(F.softplus(-net_d(x_hat)))
         loss_g.backward()
         optim_g.step()
 
