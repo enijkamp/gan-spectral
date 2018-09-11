@@ -112,7 +112,8 @@ logger = create_logger(output_dir)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
-parser.add_argument('--lr', type=float, default=0.0001)
+parser.add_argument('--lr', type=float, default=2e-4) # SNGAN
+#parser.add_argument('--lr', type=float, default=0.0001) # tf-SNDCGAN
 parser.add_argument('--nz', type=int, default=128)
 
 args = parser.parse_args()
@@ -136,19 +137,25 @@ train_flag = lambda: [net.train() for net in [net_d, net_g]]
 eval_flag = lambda: [net.eval() for net in [net_d, net_g]]
 grad_norm = lambda net: torch.sqrt(sum(torch.sum(p.grad**2) for p in net.parameters()))
 
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
+def init_params(m):
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
+        nn.init.xavier_normal(m.weight)
+        m.bias.data.zero_()
 
-net_d.apply(weights_init)
-net_g.apply(weights_init)
+net_d.apply(init_params)
+net_g.apply(init_params)
 
-optim_d = torch.optim.Adam(net_d.parameters(), lr=args.lr, betas=(0.5, 0.999))
-optim_g = torch.optim.Adam(net_g.parameters(), lr=args.lr, betas=(0.5, 0.999))
+# SNGAN
+optim_d = torch.optim.Adam(net_d.parameters(), lr=args.lr, betas=(0.0, 0.9))
+optim_g = torch.optim.Adam(net_g.parameters(), lr=args.lr, betas=(0.0, 0.9))
+schedule_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=0.99)
+schedule_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=0.99)
+
+# tf-SNDCGAN
+# optim_d = torch.optim.Adam(net_d.parameters(), lr=args.lr, betas=(0.5, 0.999))
+# optim_g = torch.optim.Adam(net_g.parameters(), lr=args.lr, betas=(0.5, 0.999))
+# schedule_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=0.998)
+# schedule_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=0.998)
 
 logger.info(('{:>14}'*8).format('epoch', 'E(real)', 'E(fake)', 'loss(D)', 'loss(G)', 'grad(D)', 'grad(G)', 'incept_v3'))
 
@@ -182,9 +189,12 @@ for epoch in range(200):
         e_real_s.append(e_real.data.item())
         e_fake_s.append(e_fake.data.item())
 
+    schedule_d.step()
+    schedule_g.step()
+
     eval_flag()
 
-    num_samples = 1000
+    num_samples = 2000
     noise_z = torch.FloatTensor(args.batch_size, args.nz)
     new_noise = lambda: noise_z.normal_().cuda()
     gen_samples = torch.cat([net_g(new_noise()).detach().cpu() for _ in range(int(num_samples / 100))])
