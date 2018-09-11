@@ -113,7 +113,7 @@ def set_gpu(device):
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
 
-set_gpu(2)
+set_gpu(0)
 
 output_dir = get_output_dir(get_exp_id())
 logger = create_logger(output_dir)
@@ -184,8 +184,8 @@ for epoch in range(200):
         x_hat = net_g(z).detach()
         x = x.cuda()
 
-        e_real = F.softplus(-net_d(x)).mean()
-        e_fake = F.softplus(net_d(x_hat)).mean()
+        e_real = torch.mean(F.softplus(-net_d(x)))
+        e_fake = torch.mean(F.softplus(net_d(x_hat)))
         loss_d = e_real + e_fake
         loss_d.backward()
         optim_d.step()

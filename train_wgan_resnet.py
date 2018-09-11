@@ -259,8 +259,8 @@ for epoch in range(200):
         x_hat = net_g(z).detach()
         x = x.cuda()
 
-        e_real = F.softplus(-net_d(x)).mean()
-        e_fake = F.softplus(net_d(x_hat)).mean()
+        e_real = torch.mean(F.softplus(-net_d(x)))
+        e_fake = torch.mean(F.softplus(net_d(x_hat)))
         loss_d = e_real + e_fake
         loss_d.backward()
         optim_d.step()
