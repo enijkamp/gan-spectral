@@ -196,17 +196,10 @@ logger = create_logger(output_dir)
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 
-# SNGAN
 parser.add_argument('--lr', type=float, default=0.0002)
 parser.add_argument('--beta1', type=float, default=0.0)
 parser.add_argument('--beta2', type=float, default=0.9)
 parser.add_argument('--gamma', type=float, default=0.99)
-
-# spectral-norm paper (C)
-# parser.add_argument('--lr', type=float, default=0.0002)
-# parser.add_argument('--beta1', type=float, default=0.5)
-# parser.add_argument('--beta2', type=float, default=0.999)
-# parser.add_argument('--gamma', type=float, default=0.998)
 
 parser.add_argument('--nz', type=int, default=128)
 
@@ -232,14 +225,6 @@ eval_flag = lambda: [net.eval() for net in [net_d, net_g]]
 grad_norm = lambda net: torch.sqrt(sum(torch.sum(p.grad**2) for p in net.parameters()))
 zero_grad = lambda: [net.zero_grad() for net in [net_d, net_g]]
 
-def init_params(m):
-    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-        nn.init.xavier_normal(m.weight)
-        m.bias.data.zero_()
-
-net_d.apply(init_params)
-net_g.apply(init_params)
-
 optim_d = torch.optim.Adam(net_d.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 optim_g = torch.optim.Adam(net_g.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
 schedule_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=args.gamma)
@@ -249,7 +234,7 @@ logger.info(('{:>14}'*8).format('epoch', 'E(real)', 'E(fake)', 'loss(D)', 'loss(
 
 z_fixed = torch.tensor(torch.randn(64, args.nz)).cuda()
 
-for epoch in range(200):
+for epoch in range(500):
     loss_d_s, loss_g_s, grad_d_s, grad_g_s, e_real_s, e_fake_s = [], [], [], [], [], []
 
     train_flag()

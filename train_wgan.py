@@ -121,17 +121,10 @@ logger = create_logger(output_dir)
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 
-# SNGAN
 parser.add_argument('--lr', type=float, default=0.0002)
 parser.add_argument('--beta1', type=float, default=0.0)
 parser.add_argument('--beta2', type=float, default=0.9)
 parser.add_argument('--gamma', type=float, default=0.99)
-
-# spectral-norm paper (C)
-# parser.add_argument('--lr', type=float, default=0.0002)
-# parser.add_argument('--beta1', type=float, default=0.5)
-# parser.add_argument('--beta2', type=float, default=0.999)
-# parser.add_argument('--gamma', type=float, default=0.998)
 
 parser.add_argument('--nz', type=int, default=128)
 
@@ -174,7 +167,7 @@ logger.info(('{:>14}'*8).format('epoch', 'E(real)', 'E(fake)', 'loss(D)', 'loss(
 
 z_fixed = torch.tensor(torch.randn(64, args.nz)).cuda()
 
-for epoch in range(200):
+for epoch in range(500):
     loss_d_s, loss_g_s, grad_d_s, grad_g_s, e_real_s, e_fake_s = [], [], [], [], [], []
 
     train_flag()
