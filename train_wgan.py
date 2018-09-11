@@ -113,15 +113,23 @@ def set_gpu(device):
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
 
-set_gpu(0)
+set_gpu(2)
 
 output_dir = get_output_dir(get_exp_id())
 logger = create_logger(output_dir)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
-parser.add_argument('--lr', type=float, default=2e-4) # SNGAN
-#parser.add_argument('--lr', type=float, default=0.0001) # tf-SNDCGAN
+# SNGAN
+parser.add_argument('--lr', type=float, default=0.0002)
+parser.add_argument('--beta1', type=float, default=0.0)
+parser.add_argument('--beta2', type=float, default=0.9)
+parser.add_argument('--gamma', type=float, default=0.99)
+# (C)
+# parser.add_argument('--lr', type=float, default=0.0002)
+# parser.add_argument('--beta1', type=float, default=0.5)
+# parser.add_argument('--beta2', type=float, default=0.999)
+# parser.add_argument('--gamma', type=float, default=0.998)
 parser.add_argument('--nz', type=int, default=128)
 
 args = parser.parse_args()
@@ -135,7 +143,7 @@ loader = torch.utils.data.DataLoader(
     batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 
 net_d = NetD().cuda()
-net_g = NetG(nz=args.nz).cuda()
+net_g = NetG(args.nz).cuda()
 
 logger.info(args)
 logger.info(net_d)
@@ -144,6 +152,7 @@ logger.info(net_g)
 train_flag = lambda: [net.train() for net in [net_d, net_g]]
 eval_flag = lambda: [net.eval() for net in [net_d, net_g]]
 grad_norm = lambda net: torch.sqrt(sum(torch.sum(p.grad**2) for p in net.parameters()))
+zero_grad = lambda: [net.zero_grad() for net in [net_d, net_g]]
 
 def init_params(m):
     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
@@ -153,17 +162,10 @@ def init_params(m):
 net_d.apply(init_params)
 net_g.apply(init_params)
 
-# SNGAN
-optim_d = torch.optim.Adam(net_d.parameters(), lr=args.lr, betas=(0.0, 0.9))
-optim_g = torch.optim.Adam(net_g.parameters(), lr=args.lr, betas=(0.0, 0.9))
-schedule_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=0.99)
-schedule_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=0.99)
-
-# tf-SNDCGAN
-# optim_d = torch.optim.Adam(net_d.parameters(), lr=args.lr, betas=(0.5, 0.999))
-# optim_g = torch.optim.Adam(net_g.parameters(), lr=args.lr, betas=(0.5, 0.999))
-# schedule_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=1.0)
-# schedule_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=1.0)
+optim_d = torch.optim.Adam(net_d.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
+optim_g = torch.optim.Adam(net_g.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
+schedule_d = torch.optim.lr_scheduler.ExponentialLR(optim_d, gamma=args.gamma)
+schedule_g = torch.optim.lr_scheduler.ExponentialLR(optim_g, gamma=args.gamma)
 
 logger.info(('{:>14}'*8).format('epoch', 'E(real)', 'E(fake)', 'loss(D)', 'loss(G)', 'grad(D)', 'grad(G)', 'incept_v3'))
 
@@ -179,8 +181,8 @@ for epoch in range(200):
         x_hat = net_g(z).detach()
         x = x.cuda()
 
-        e_real = F.softplus(-net_d(x).mean())
-        e_fake = F.softplus(net_d(x_hat).mean())
+        e_real = F.softplus(-net_d(x)).mean()
+        e_fake = F.softplus(net_d(x_hat)).mean()
         loss_d = e_real + e_fake
         loss_d.backward()
         optim_d.step()
