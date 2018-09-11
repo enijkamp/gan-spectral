@@ -17,67 +17,142 @@ import torchvision.utils as vutils
 import inception_score_v3 as is_v3
 
 
-class NetG(torch.nn.Module):
-    def __init__(self, nz=128, nc=3, ngf=512):
+class NetG(nn.Module):
+    def __init__(self, z_dim, size=128):
         super(NetG, self).__init__()
+        self.z_dim = z_dim
+        self.size = size
 
-        self.nz = nz
-        self.ngf = ngf
+        self.dense = nn.Linear(self.z_dim, 4 * 4 * size)
+        self.final = nn.Conv2d(size, 3, 3, stride=1, padding=1)
+        nn.init.xavier_uniform(self.dense.weight.data, 1.)
+        nn.init.xavier_uniform(self.final.weight.data, 1.)
 
-        self.linear = nn.Linear(nz, 4 * 4 * ngf)
-        self.activation = nn.ReLU()
-        self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(self.ngf, self.ngf // 2, 4, 2, 1),
-            nn.BatchNorm2d(self.ngf // 2),
+        self.model = nn.Sequential(
+            ResBlockGenerator(size, size, stride=2),
+            ResBlockGenerator(size, size, stride=2),
+            ResBlockGenerator(size, size, stride=2),
+            nn.BatchNorm2d(size),
             nn.ReLU(),
-
-            nn.ConvTranspose2d(self.ngf // 2, self.ngf // 4, 4, 2, 1),
-            nn.BatchNorm2d(self.ngf // 4),
-            nn.ReLU(),
-
-            nn.ConvTranspose2d(self.ngf // 4, self.ngf // 8, 4, 2, 1),
-            nn.BatchNorm2d(self.ngf // 8),
-            nn.ReLU(),
-
-            nn.ConvTranspose2d(self.ngf // 8, nc, nc, 1, 1),
-            nn.Tanh()
-        )
+            self.final,
+            nn.Tanh())
 
     def forward(self, z):
-        out = self.activation(self.linear(z))
-        out = out.view(-1, self.ngf, 4, 4)
-        out = self.deconv(out)
-
-        return out
+        return self.model(self.dense(z).view(-1, self.size, 4, 4))
 
 
-class NetD(torch.nn.Module):
-    def __init__(self, ndf=512, nc=3):
-        super(NetD, self).__init__()
+class ResBlockGenerator(nn.Module):
 
-        self.layer1 = self.layer(3, ndf // 8)
-        self.layer2 = self.layer(ndf // 8, ndf // 4)
-        self.layer3 = self.layer(ndf // 4, ndf // 2)
-        self.layer4 = spectral_norm(nn.Conv2d(ndf // 2, ndf, nc, 1, 1))
-        self.linear = spectral_norm(nn.Linear(ndf * 4 * 4, 1))
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(ResBlockGenerator, self).__init__()
 
-    def layer(self, in_plane, out_plane):
-        return torch.nn.Sequential(
-            spectral_norm(nn.Conv2d(in_plane, out_plane, 3, 1, 1)),
-            nn.LeakyReLU(0.1),
-            spectral_norm(nn.Conv2d(out_plane, out_plane, 4, 2, 1)),
-            nn.LeakyReLU(0.1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, 1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, 1, padding=1)
+        nn.init.xavier_uniform(self.conv1.weight.data, 1.)
+        nn.init.xavier_uniform(self.conv2.weight.data, 1.)
+
+        self.model = nn.Sequential(
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(),
+            nn.Upsample(scale_factor=2),
+            self.conv1,
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(),
+            self.conv2
+            )
+        self.bypass = nn.Sequential()
+        if stride != 1:
+            self.bypass = nn.Upsample(scale_factor=2)
+
+    def forward(self, x):
+        return self.model(x) + self.bypass(x)
+
+
+class ResBlockDiscriminator(nn.Module):
+
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(ResBlockDiscriminator, self).__init__()
+
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, 1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, 1, padding=1)
+        nn.init.xavier_uniform(self.conv1.weight.data, 1.)
+        nn.init.xavier_uniform(self.conv2.weight.data, 1.)
+
+        if stride == 1:
+            self.model = nn.Sequential(
+                nn.ReLU(),
+                spectral_norm(self.conv1),
+                nn.ReLU(),
+                spectral_norm(self.conv2)
+                )
+        else:
+            self.model = nn.Sequential(
+                nn.ReLU(),
+                spectral_norm(self.conv1),
+                nn.ReLU(),
+                spectral_norm(self.conv2),
+                nn.AvgPool2d(2, stride=stride, padding=0)
+                )
+        self.bypass = nn.Sequential()
+        if stride != 1:
+
+            self.bypass_conv = nn.Conv2d(in_channels,out_channels, 1, 1, padding=0)
+            nn.init.xavier_uniform(self.bypass_conv.weight.data, np.sqrt(2))
+
+            self.bypass = nn.Sequential(
+                spectral_norm(self.bypass_conv),
+                nn.AvgPool2d(2, stride=stride, padding=0)
+            )
+
+    def forward(self, x):
+        return self.model(x) + self.bypass(x)
+
+
+class FirstResBlockDiscriminator(nn.Module):
+
+    def __init__(self, in_channels, out_channels):
+        super(FirstResBlockDiscriminator, self).__init__()
+
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, 1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, 1, padding=1)
+        self.bypass_conv = nn.Conv2d(in_channels, out_channels, 1, 1, padding=0)
+        nn.init.xavier_uniform(self.conv1.weight.data, 1.)
+        nn.init.xavier_uniform(self.conv2.weight.data, 1.)
+        nn.init.xavier_uniform(self.bypass_conv.weight.data, np.sqrt(2))
+
+        self.model = nn.Sequential(
+            spectral_norm(self.conv1),
+            nn.ReLU(),
+            spectral_norm(self.conv2),
+            nn.AvgPool2d(2)
+            )
+        self.bypass = nn.Sequential(
+            nn.AvgPool2d(2),
+            spectral_norm(self.bypass_conv),
         )
 
     def forward(self, x):
-        out = self.layer1(x)
-        out = self.layer2(out)
-        out = self.layer3(out)
-        out = self.layer4(out)
-        out = out.view(out.size(0), -1)
-        out = self.linear(out)
+        return self.model(x) + self.bypass(x)
 
-        return out.squeeze()
+
+class NetD(nn.Module):
+    def __init__(self, size=128):
+        super(NetD, self).__init__()
+        self.size = size
+        self.model = nn.Sequential(
+                FirstResBlockDiscriminator(3, size),
+                ResBlockDiscriminator(size, size, stride=2),
+                ResBlockDiscriminator(size, size),
+                ResBlockDiscriminator(size, size),
+                nn.ReLU(),
+                nn.AvgPool2d(8),
+            )
+        self.fc = nn.Linear(size, 1)
+        nn.init.xavier_uniform(self.fc.weight.data, 1.)
+        self.fc = spectral_norm(self.fc)
+
+    def forward(self, x):
+        return self.fc(self.model(x).view(-1, self.size))
 
 
 def get_exp_id():
@@ -113,7 +188,7 @@ def set_gpu(device):
     os.environ['CUDA_VISIBLE_DEVICES'] = str(device)
 
 
-set_gpu(1)
+set_gpu(2)
 
 output_dir = get_output_dir(get_exp_id())
 logger = create_logger(output_dir)
@@ -121,7 +196,7 @@ logger = create_logger(output_dir)
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--lr', type=float, default=2e-4) # SNGAN
-#parser.add_argument('--lr', type=float, default=0.0001) # tf-SNDCGAN
+# parser.add_argument('--lr', type=float, default=0.0002) # tf-SNDCGAN
 parser.add_argument('--nz', type=int, default=128)
 
 args = parser.parse_args()
@@ -135,7 +210,7 @@ loader = torch.utils.data.DataLoader(
     batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 
 net_d = NetD().cuda()
-net_g = NetG(nz=args.nz).cuda()
+net_g = NetG(args.nz).cuda()
 
 logger.info(args)
 logger.info(net_d)
