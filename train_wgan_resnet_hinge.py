@@ -3,6 +3,7 @@ import logging
 import sys
 import os
 import datetime
+import shutil
 
 import numpy as np
 
@@ -181,6 +182,14 @@ def create_logger(output_dir):
     logger.setLevel(logging.INFO)
     return logger
 
+
+def copy_source(file, output_dir):
+    shutil.copyfile(file, os.path.join(output_dir, os.path.basename(file)))
+
+
+output_dir = get_output_dir(get_exp_id())
+logger = create_logger(output_dir)
+copy_source(__file__, output_dir)
 
 torch.cuda.set_device(0)
 
