@@ -29,9 +29,9 @@ class NetG(nn.Module):
         nn.init.xavier_uniform(self.final.weight.data, 1.)
 
         self.model = nn.Sequential(
-            ResBlockGenerator(size, size, stride=2),
-            ResBlockGenerator(size, size, stride=2),
-            ResBlockGenerator(size, size, stride=2),
+            ResBlockGenerator(size, size),
+            ResBlockGenerator(size, size),
+            ResBlockGenerator(size, size),
             nn.BatchNorm2d(size),
             nn.ReLU(),
             self.final,
@@ -43,11 +43,11 @@ class NetG(nn.Module):
 
 class ResBlockGenerator(nn.Module):
 
-    def __init__(self, in_channels, out_channels, stride=1):
+    def __init__(self, in_channels, out_channels, upsampling=True):
         super(ResBlockGenerator, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, 1, padding=1)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, 1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         nn.init.xavier_uniform(self.conv1.weight.data, 1.)
         nn.init.xavier_uniform(self.conv2.weight.data, 1.)
 
@@ -61,7 +61,7 @@ class ResBlockGenerator(nn.Module):
             self.conv2
             )
         self.bypass = nn.Sequential()
-        if stride != 1:
+        if upsampling:
             self.bypass = nn.Upsample(scale_factor=2)
 
     def forward(self, x):
@@ -96,7 +96,7 @@ class ResBlockDiscriminator(nn.Module):
         self.bypass = nn.Sequential()
         if stride != 1:
 
-            self.bypass_conv = nn.Conv2d(in_channels,out_channels, 1, 1, padding=0)
+            self.bypass_conv = nn.Conv2d(in_channels, out_channels, 1, 1, padding=0)
             nn.init.xavier_uniform(self.bypass_conv.weight.data, np.sqrt(2))
 
             self.bypass = nn.Sequential(
