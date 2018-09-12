@@ -29,9 +29,9 @@ class NetG(nn.Module):
         nn.init.xavier_uniform(self.final.weight.data, 1.)
 
         self.model = nn.Sequential(
-            ResBlockGenerator(size, size, stride=2),
-            ResBlockGenerator(size, size, stride=2),
-            ResBlockGenerator(size, size, stride=2),
+            ResBlockGenerator(size, size),
+            ResBlockGenerator(size, size),
+            ResBlockGenerator(size, size),
             nn.BatchNorm2d(size),
             nn.ReLU(),
             self.final,
@@ -43,11 +43,11 @@ class NetG(nn.Module):
 
 class ResBlockGenerator(nn.Module):
 
-    def __init__(self, in_channels, out_channels, stride=1):
+    def __init__(self, in_channels, out_channels, upsampling=True):
         super(ResBlockGenerator, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, 1, padding=1)
-        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, 1, padding=1)
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         nn.init.xavier_uniform(self.conv1.weight.data, 1.)
         nn.init.xavier_uniform(self.conv2.weight.data, 1.)
 
@@ -61,7 +61,7 @@ class ResBlockGenerator(nn.Module):
             self.conv2
             )
         self.bypass = nn.Sequential()
-        if stride != 1:
+        if upsampling:
             self.bypass = nn.Upsample(scale_factor=2)
 
     def forward(self, x):
@@ -96,7 +96,7 @@ class ResBlockDiscriminator(nn.Module):
         self.bypass = nn.Sequential()
         if stride != 1:
 
-            self.bypass_conv = nn.Conv2d(in_channels,out_channels, 1, 1, padding=0)
+            self.bypass_conv = nn.Conv2d(in_channels, out_channels, 1, 1, padding=0)
             nn.init.xavier_uniform(self.bypass_conv.weight.data, np.sqrt(2))
 
             self.bypass = nn.Sequential(
@@ -192,7 +192,8 @@ parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--lr', type=float, default=0.0002)
 parser.add_argument('--beta1', type=float, default=0.0)
 parser.add_argument('--beta2', type=float, default=0.9)
-parser.add_argument('--gamma', type=float, default=0.99)
+parser.add_argument('--gamma', type=float, default=1.00)
+parser.add_argument('--n_disc', type=int, default=5)
 parser.add_argument('--nz', type=int, default=128)
 
 args = parser.parse_args()
@@ -231,40 +232,45 @@ for epoch in range(500):
 
     train_flag()
     for i, (x, _) in enumerate(loader):
-        zero_grad()
-        z = torch.randn(args.batch_size, args.nz).cuda()
-        x_hat = net_g(z)
-        x = x.cuda()
 
-        e_real = torch.mean(F.softplus(-net_d(x)))
-        e_fake = torch.mean(F.softplus(net_d(x_hat.detach())))
-        loss_d = e_real + e_fake
-        loss_d.backward()
-        optim_d.step()
+        for _ in range(args.n_disc):
+
+            zero_grad()
+            z = torch.randn(args.batch_size, args.nz).cuda()
+            x_hat = net_g(z)
+            x = x.cuda()
+
+            e_real = torch.mean(F.relu(1.0 - net_d(x)))
+            e_fake = torch.mean(F.relu(1.0 + net_d(x_hat.detach())))
+            loss_d = e_real + e_fake
+            loss_d.backward()
+            optim_d.step()
+
+            loss_d_s.append(loss_d.data.item())
+            grad_d_s.append(grad_norm(net_d).data.item())
+            e_real_s.append(e_real.data.item())
+            e_fake_s.append(e_fake.data.item())
 
         zero_grad()
-        loss_g = torch.mean(F.softplus(-net_d(x_hat)))
+        loss_g = -torch.mean(net_d(x_hat))
         loss_g.backward()
         optim_g.step()
 
-        loss_d_s.append(loss_d.data.item())
         loss_g_s.append(loss_g.data.item())
-        grad_d_s.append(grad_norm(net_d).data.item())
         grad_g_s.append(grad_norm(net_g).data.item())
-        e_real_s.append(e_real.data.item())
-        e_fake_s.append(e_fake.data.item())
 
     schedule_d.step()
     schedule_g.step()
+
 
     eval_flag()
 
     num_samples = 2000
     noise_z = torch.FloatTensor(args.batch_size, args.nz)
     new_noise = lambda: noise_z.normal_().cuda()
-    gen_samples = torch.cat([net_g(new_noise()).detach().cpu() for _ in range(int(num_samples / 100))])
+    gen_samples = torch.cat([net_g(new_noise()).detach().cpu() for _ in range(int(num_samples / 100))]) # TODO clamp? re-normalize see sngan?
     incept_v3 = is_v3.inception_score(gen_samples, resize=True, splits=1)[0]
 
-    vutils.save_image(net_g(z_fixed).data, '{}/samples_{}.png'.format(output_dir, epoch), normalize=True)
+    vutils.save_image(net_g(z_fixed).data, '{}/{}_samples.png'.format(output_dir, epoch), normalize=True)
 
     logger.info(('{:>14}' + '{:>14.3f}'*7).format(epoch, np.mean(e_real_s), np.mean(e_fake_s), np.mean(loss_d_s), np.mean(loss_g_s), np.mean(grad_d_s), np.mean(grad_g_s), incept_v3))
