@@ -268,7 +268,7 @@ for epoch in range(500):
     num_samples = 2000
     noise_z = torch.FloatTensor(args.batch_size, args.nz)
     new_noise = lambda: noise_z.normal_().cuda()
-    gen_samples = torch.cat([net_g(new_noise()).detach().cpu() for _ in range(int(num_samples / 100))]) # TODO clamp? re-normalize see sngan?
+    gen_samples = torch.cat([net_g(new_noise()).detach().cpu() for _ in range(int(num_samples / 100))])
     incept_v3 = is_v3.inception_score(gen_samples, resize=True, splits=1)[0]
 
     vutils.save_image(net_g(z_fixed).data, '{}/{}_samples.png'.format(output_dir, epoch), normalize=True)
