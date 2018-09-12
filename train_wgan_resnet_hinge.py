@@ -234,14 +234,13 @@ for epoch in range(500):
     for i, (x, _) in enumerate(loader):
 
         for _ in range(args.n_disc):
-
             zero_grad()
             z = torch.randn(args.batch_size, args.nz).cuda()
-            x_hat = net_g(z)
+            x_hat = net_g(z).detach()
             x = x.cuda()
 
             e_real = torch.mean(F.relu(1.0 - net_d(x)))
-            e_fake = torch.mean(F.relu(1.0 + net_d(x_hat.detach())))
+            e_fake = torch.mean(F.relu(1.0 + net_d(x_hat)))
             loss_d = e_real + e_fake
             loss_d.backward()
             optim_d.step()
@@ -252,6 +251,8 @@ for epoch in range(500):
             e_fake_s.append(e_fake.data.item())
 
         zero_grad()
+        z = torch.randn(args.batch_size, args.nz).cuda()
+        x_hat = net_g(z)
         loss_g = -torch.mean(net_d(x_hat))
         loss_g.backward()
         optim_g.step()
