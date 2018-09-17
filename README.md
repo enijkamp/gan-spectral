@@ -1,5 +1,5 @@
-# wgan-spectral
-Wasserstein-GAN with Spectral-Normalization.
+# gan-spectral
+GAN with Spectral-Normalization.
 
 requires:
 
